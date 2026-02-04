@@ -1,6 +1,9 @@
+import AddressEditModal from "@/components/AddressEditModal";
+import { useUserLocation } from "@/contexts/UserLocationContext";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
+import { useState } from "react";
 import {
   Image,
   ScrollView,
@@ -60,6 +63,9 @@ const popularItems = [
 ];
 
 export default function BuyPage() {
+  const { address, setAddress } = useUserLocation();
+  const [modalVisible, setModalVisible] = useState(false);
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -71,13 +77,30 @@ export default function BuyPage() {
           >
             <MaterialCommunityIcons name="tractor" size={18} color="#fff" />
           </LinearGradient>
-          <Text style={styles.headerTitle}>FarmerCab</Text>
+          <View>
+            <Text style={styles.headerTitle}>FarmerCab</Text>
+            <TouchableOpacity
+              style={styles.headerLocationRow}
+              onPress={() => setModalVisible(true)}
+            >
+              <Ionicons name="location-sharp" size={12} color={colors.accent} />
+              <Text style={styles.headerLocation}>{address}</Text>
+              <Ionicons name="pencil" size={10} color={colors.textMuted} style={{ marginLeft: 2 }} />
+            </TouchableOpacity>
+          </View>
         </View>
         <TouchableOpacity style={styles.headerRight}>
           <Ionicons name="wallet-outline" size={18} color={colors.primary} />
           <Text style={styles.headerBalance}>₹5,200</Text>
         </TouchableOpacity>
       </View>
+
+      <AddressEditModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        currentAddress={address}
+        onSave={setAddress}
+      />
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Title Row */}
@@ -317,6 +340,17 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     letterSpacing: 0.5,
+  },
+  headerLocationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+    gap: 2,
+  },
+  headerLocation: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "500",
   },
   headerRight: {
     flexDirection: "row",

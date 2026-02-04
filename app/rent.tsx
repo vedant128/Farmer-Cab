@@ -1,16 +1,18 @@
+import AddressEditModal from "@/components/AddressEditModal";
+import EquipmentMap from "@/components/EquipmentMap";
+import { useUserLocation } from "@/contexts/UserLocationContext";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import Slider from "@react-native-community/slider";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { useEffect, useRef } from "react";
+import { useState } from "react";
 import {
-  Animated,
-  Easing,
   Image,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
 // Elegant color palette
@@ -27,138 +29,13 @@ const colors = {
   border: "rgba(16, 185, 129, 0.2)",
 };
 
-// Equipment markers positions (angle in degrees, distance from center as ratio)
-const equipmentMarkers = [
-  { id: 1, angle: 45, distance: 0.7, type: "tractor" },
-  { id: 2, angle: 120, distance: 0.85, type: "tractor" },
-  { id: 3, angle: 200, distance: 0.6, type: "tractor" },
-  { id: 4, angle: 280, distance: 0.75, type: "harvester" },
-  { id: 5, angle: 330, distance: 0.5, type: "tractor" },
-];
 
-function RadarMap() {
-  const scanRotation = useRef(new Animated.Value(0)).current;
-  const pulseScale = useRef(new Animated.Value(0.3)).current;
-  const pulseOpacity = useRef(new Animated.Value(0.6)).current;
-
-  useEffect(() => {
-    // Continuous radar scan rotation
-    Animated.loop(
-      Animated.timing(scanRotation, {
-        toValue: 1,
-        duration: 3000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
-
-    // Pulse animation
-    Animated.loop(
-      Animated.parallel([
-        Animated.timing(pulseScale, {
-          toValue: 1,
-          duration: 2000,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseOpacity, {
-          toValue: 0,
-          duration: 2000,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, []);
-
-  const spin = scanRotation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
-
-  const radarSize = 220;
-  const centerOffset = radarSize / 2;
-
-  return (
-    <View style={styles.radarContainer}>
-      {/* Radar background with rings */}
-      <View style={[styles.radar, { width: radarSize, height: radarSize }]}>
-        {/* Outer glow */}
-        <View style={styles.radarGlow} />
-
-        {/* Concentric rings */}
-        <View style={[styles.ring, styles.ring1]} />
-        <View style={[styles.ring, styles.ring2]} />
-        <View style={[styles.ring, styles.ring3]} />
-
-        {/* Cross lines */}
-        <View style={styles.crossHorizontal} />
-        <View style={styles.crossVertical} />
-
-        {/* Pulse effect */}
-        <Animated.View
-          style={[
-            styles.pulse,
-            {
-              transform: [{ scale: pulseScale }],
-              opacity: pulseOpacity,
-            },
-          ]}
-        />
-
-        {/* Scanning beam */}
-        <Animated.View
-          style={[
-            styles.scanBeamContainer,
-            { transform: [{ rotate: spin }] },
-          ]}
-        >
-          <LinearGradient
-            colors={["rgba(16, 185, 129, 0.6)", "transparent"]}
-            style={styles.scanBeam}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-          />
-        </Animated.View>
-
-        {/* Equipment markers */}
-        {equipmentMarkers.map((marker) => {
-          const radians = (marker.angle * Math.PI) / 180;
-          const x = Math.cos(radians) * (centerOffset * marker.distance);
-          const y = Math.sin(radians) * (centerOffset * marker.distance);
-          return (
-            <View
-              key={marker.id}
-              style={[
-                styles.equipmentMarker,
-                {
-                  left: centerOffset + x - 12,
-                  top: centerOffset + y - 12,
-                },
-              ]}
-            >
-              <MaterialCommunityIcons
-                name="tractor"
-                size={18}
-                color={colors.primaryLight}
-              />
-            </View>
-          );
-        })}
-
-        {/* Center tractor (user location) */}
-        <View style={styles.centerTractor}>
-          <Image
-            source={require("../assets/images/tractor_bg.png")}
-            style={styles.centerTractorImage}
-          />
-        </View>
-      </View>
-    </View>
-  );
-}
 
 export default function RentPage() {
+  const { address, setAddress } = useUserLocation();
+  const [modalVisible, setModalVisible] = useState(false);
+  const [scanRange, setScanRange] = useState(10);
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -170,7 +47,17 @@ export default function RentPage() {
           >
             <MaterialCommunityIcons name="tractor" size={18} color="#fff" />
           </LinearGradient>
-          <Text style={styles.headerTitle}>FarmerCab</Text>
+          <View>
+            <Text style={styles.headerTitle}>FarmerCab</Text>
+            <TouchableOpacity
+              style={styles.locationRow}
+              onPress={() => setModalVisible(true)}
+            >
+              <Ionicons name="location-sharp" size={12} color={colors.accent} />
+              <Text style={styles.headerLocation}>{address}</Text>
+              <Ionicons name="pencil" size={10} color={colors.textMuted} style={{ marginLeft: 2 }} />
+            </TouchableOpacity>
+          </View>
         </View>
         <TouchableOpacity style={styles.headerRight}>
           <Ionicons name="wallet-outline" size={18} color={colors.primary} />
@@ -178,35 +65,50 @@ export default function RentPage() {
         </TouchableOpacity>
       </View>
 
+      <AddressEditModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        currentAddress={address}
+        onSave={setAddress}
+      />
+
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Rent Equipment Title and Post Rental */}
         <View style={styles.rentRow}>
           <Text style={styles.rentTitle}>Rent Equipment</Text>
-          <TouchableOpacity>
-            <LinearGradient
-              colors={[colors.primary, colors.primaryDark]}
-              style={styles.postRentalBtn}
-            >
-              <Text style={styles.postRentalText}>+ Post Rental</Text>
-            </LinearGradient>
-          </TouchableOpacity>
         </View>
 
-        {/* Radar Searching Section */}
-        <LinearGradient
-          colors={[colors.surface, "rgba(17, 24, 39, 0.9)"]}
-          style={styles.searchingSection}
-        >
-          <Text style={styles.searchingText}>
-            Searching <Text style={styles.searchingHighlight}>10km...</Text>
-          </Text>
+        {/* Map Searching Section */}
+        <View style={styles.searchingSection}>
+          <View style={styles.searchHeader}>
+            <Text style={styles.searchingText}>
+              Searching <Text style={styles.searchingHighlight}>{scanRange}km</Text>
+            </Text>
+          </View>
 
-          <RadarMap />
+          <View style={styles.mapContainer}>
+            <EquipmentMap scanRangeKm={scanRange} />
+          </View>
 
-          <TouchableOpacity style={styles.voiceBtn}>
-            <Ionicons name="mic" size={22} color={colors.primary} />
-          </TouchableOpacity>
-        </LinearGradient>
+          <View style={styles.sliderContainer}>
+            <Text style={styles.sliderLabel}>Scan Range: {scanRange} km</Text>
+            <Slider
+              style={{ width: '100%', height: 40 }}
+              minimumValue={1}
+              maximumValue={50}
+              step={1}
+              value={scanRange}
+              onValueChange={setScanRange}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor="#ffffff"
+              thumbTintColor={colors.primary}
+            />
+            <View style={styles.rangeLabels}>
+              <Text style={styles.rangeText}>1km</Text>
+              <Text style={styles.rangeText}>50km</Text>
+            </View>
+          </View>
+        </View>
 
         {/* Recommended for Rent */}
         <Text style={styles.sectionTitle}>Recommended for Rent</Text>
@@ -357,6 +259,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.5,
   },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+    gap: 2,
+  },
+  headerLocation: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "500",
+  },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
@@ -401,117 +314,47 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     marginHorizontal: 20,
     marginBottom: 24,
-    alignItems: "center",
-    padding: 20,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  searchHeader: {
+    padding: 16,
+    paddingBottom: 0,
   },
   searchingText: {
     color: colors.text,
     fontSize: 16,
-    marginBottom: 15,
     fontWeight: "500",
   },
   searchingHighlight: {
     color: colors.primary,
     fontWeight: "700",
   },
-  radarContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    marginVertical: 10,
+  mapContainer: {
+    height: 300,
+    width: '100%',
+    marginTop: 10,
   },
-  radar: {
-    borderRadius: 110,
-    backgroundColor: "rgba(16, 185, 129, 0.05)",
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: "hidden",
+  sliderContainer: {
+    padding: 20,
+    paddingTop: 10,
   },
-  radarGlow: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
-    borderRadius: 110,
-    borderWidth: 2,
-    borderColor: "rgba(16, 185, 129, 0.25)",
+  sliderLabel: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginBottom: 5,
   },
-  ring: {
-    position: "absolute",
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.15)",
+  rangeLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
-  ring1: {
-    width: "80%",
-    height: "80%",
+  rangeText: {
+    color: colors.textMuted,
+    fontSize: 10,
   },
-  ring2: {
-    width: "55%",
-    height: "55%",
-  },
-  ring3: {
-    width: "30%",
-    height: "30%",
-  },
-  crossHorizontal: {
-    position: "absolute",
-    width: "100%",
-    height: 1,
-    backgroundColor: "rgba(16, 185, 129, 0.1)",
-  },
-  crossVertical: {
-    position: "absolute",
-    width: 1,
-    height: "100%",
-    backgroundColor: "rgba(16, 185, 129, 0.1)",
-  },
-  pulse: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
-    borderRadius: 110,
-    borderWidth: 2,
-    borderColor: colors.primary,
-  },
-  scanBeamContainer: {
-    position: "absolute",
-    width: "50%",
-    height: 4,
-    right: "50%",
-    transformOrigin: "right center",
-  },
-  scanBeam: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 2,
-  },
-  equipmentMarker: {
-    position: "absolute",
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(16, 185, 129, 0.15)",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.3)",
-  },
-  centerTractor: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: "rgba(16, 185, 129, 0.1)",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "rgba(16, 185, 129, 0.3)",
-  },
-  centerTractorImage: {
-    width: 50,
-    height: 50,
-    resizeMode: "contain",
-  },
+
   voiceBtn: {
     backgroundColor: colors.surface,
     borderRadius: 25,

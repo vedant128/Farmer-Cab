@@ -12,9 +12,34 @@ import {
   View,
 } from "react-native";
 
+import { useState } from "react";
+
 export default function LoginScreen() {
-  const handleLogin = () => {
-    router.replace("/profile");
+  const [step, setStep] = useState(0); // 0: Phone, 1: OTP
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [otp, setOtp] = useState("");
+
+  const handleGetOtp = () => {
+    if (phoneNumber.length >= 10) {
+      setStep(1);
+    } else {
+      // Simple validation alert or toast (mock)
+      console.log("Invalid Phone Number");
+    }
+  };
+
+  const handleVerifyOtp = () => {
+    if (otp.length === 4) {
+      // Mock verification success
+      router.replace("/profile");
+    } else {
+      console.log("Invalid OTP");
+    }
+  };
+
+  const handleBackToPhone = () => {
+    setStep(0);
+    setOtp("");
   };
 
   return (
@@ -42,56 +67,91 @@ export default function LoginScreen() {
         </View>
 
         {/* Welcome Text */}
-        <Text style={styles.welcomeText}>Welcome Back</Text>
+        <Text style={styles.welcomeText}>
+          {step === 0 ? "Welcome Back" : "Verify OTP"}
+        </Text>
 
         {/* Login Form */}
         <View style={styles.formContainer}>
-          {/* Email Input */}
-          <View style={styles.inputContainer}>
-            <Ionicons name="mail-outline" size={20} color="#4CAF50" style={styles.inputIcon} />
-            <TextInput
-              placeholder="sanyog@gmail.com"
-              placeholderTextColor="#666"
-              style={styles.input}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
 
-          {/* Password Input */}
-          <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color="#4CAF50" style={styles.inputIcon} />
-            <TextInput
-              placeholder="••••••••"
-              placeholderTextColor="#666"
-              style={styles.input}
-              secureTextEntry
-            />
-          </View>
+          {step === 0 ? (
+            /* Step 0: Phone Number Input */
+            <View>
+              <View style={styles.inputContainer}>
+                <Ionicons name="call-outline" size={20} color="#4CAF50" style={styles.inputIcon} />
+                <TextInput
+                  placeholder="Mobile Number"
+                  placeholderTextColor="#666"
+                  style={styles.input}
+                  keyboardType="phone-pad"
+                  autoCapitalize="none"
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  maxLength={10}
+                />
+              </View>
 
-          {/* Login Button */}
-          <TouchableOpacity onPress={handleLogin} activeOpacity={0.8}>
-            <LinearGradient
-              colors={["#4CAF50", "#388E3C"]}
-              style={styles.loginBtn}
-            >
-              <Text style={styles.loginBtnText}>Log In</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+              <TouchableOpacity onPress={handleGetOtp} activeOpacity={0.8}>
+                <LinearGradient
+                  colors={["#4CAF50", "#388E3C"]}
+                  style={styles.loginBtn}
+                >
+                  <Text style={styles.loginBtnText}>Get OTP</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            /* Step 1: OTP Input */
+            <View>
+              <Text style={styles.otpSentText}>
+                OTP sent to +91 {phoneNumber}
+              </Text>
 
-          {/* Forgot Password */}
-          <TouchableOpacity style={styles.forgotBtn}>
-            <Text style={styles.forgotText}>Forgot Password?</Text>
-          </TouchableOpacity>
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={20} color="#4CAF50" style={styles.inputIcon} />
+                <TextInput
+                  placeholder="Enter 4-digit OTP"
+                  placeholderTextColor="#666"
+                  style={styles.input}
+                  keyboardType="number-pad"
+                  autoCapitalize="none"
+                  value={otp}
+                  onChangeText={setOtp}
+                  maxLength={4}
+                />
+              </View>
+
+              <TouchableOpacity onPress={handleVerifyOtp} activeOpacity={0.8}>
+                <LinearGradient
+                  colors={["#4CAF50", "#388E3C"]}
+                  style={styles.loginBtn}
+                >
+                  <Text style={styles.loginBtnText}>Verify & Login</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <View style={styles.otpActions}>
+                <TouchableOpacity onPress={handleBackToPhone}>
+                  <Text style={styles.otpActionText}>Change Number</Text>
+                </TouchableOpacity>
+                <TouchableOpacity>
+                  <Text style={styles.otpActionText}>Resend OTP</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
         </View>
 
-        {/* Register Link */}
-        <View style={styles.registerContainer}>
-          <Text style={styles.registerText}>Don't have an account? </Text>
-          <TouchableOpacity>
-            <Text style={styles.registerLink}>Register</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Register Link (Only on step 0 optionally, or keep it always) */}
+        {step === 0 && (
+          <View style={styles.registerContainer}>
+            <Text style={styles.registerText}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => router.push("/register")}>
+              <Text style={styles.registerLink}>Register</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </ImageBackground>
   );
@@ -192,4 +252,20 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 14,
   },
+  otpSentText: {
+    color: "#ccc",
+    fontSize: 14,
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  otpActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    paddingHorizontal: 5
+  },
+  otpActionText: {
+    color: "#4CAF50",
+    fontSize: 14,
+  }
 });
