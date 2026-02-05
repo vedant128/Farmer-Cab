@@ -1,8 +1,10 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
+    ActivityIndicator,
+    Alert,
     ImageBackground,
     KeyboardAvoidingView,
     Platform,
@@ -13,22 +15,75 @@ import {
     View,
 } from "react-native";
 
+import { FirebaseRecaptchaVerifierModal } from "expo-firebase-recaptcha";
+import { ConfirmationResult, signInWithPhoneNumber } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
+
+import { auth, db } from "../firebaseConfig";
+
+
 export default function RegisterScreen() {
+    const [name, setName] = useState("");
     const [phone, setPhone] = useState("");
     const [otp, setOtp] = useState("");
     const [showOtp, setShowOtp] = useState(false);
     const [otpSent, setOtpSent] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
 
-    const handleSendOtp = () => {
-        if (phone.length >= 10) {
+    const recaptchaVerifier = useRef<any>(null);
+
+    const handleSendOtp = async () => {
+        if (name.trim() === "" || phone.length !== 10) {
+            Alert.alert("Error", "Enter valid name and phone number");
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const confirmationResult = await signInWithPhoneNumber(
+                auth,
+                "+91" + phone,
+                recaptchaVerifier.current
+            );
+
+            setConfirmation(confirmationResult);
             setShowOtp(true);
             setOtpSent(true);
+        } catch (error: any) {
+            Alert.alert("Error", error.message);
+        } finally {
+            setLoading(false);
         }
     };
 
-    const handleVerifyOtp = () => {
-        if (otp.length >= 4) {
+    const handleVerifyOtp = async () => {
+        if (!confirmation || otp.length < 6) {
+            Alert.alert("Error", "Enter valid OTP");
+            return;
+        }
+
+        try {
+            setLoading(true);
+            console.log("Verifying OTP...");
+            const result = await confirmation.confirm(otp);
+            const uid = result.user.uid;
+            console.log("OTP Verified. UID:", uid);
+
+            console.log("Saving user to Firestore...");
+            await setDoc(doc(db, "users", uid), {
+                name,
+                phone,
+                createdAt: new Date(),
+            });
+            console.log("User saved. Navigating to /user-type...");
+
             router.push("/user-type");
+        } catch (error: any) {
+            console.error("Verification Error:", error);
+            Alert.alert("Error", error.message || "Invalid OTP");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -38,6 +93,11 @@ export default function RegisterScreen() {
             style={styles.bg}
             resizeMode="cover"
         >
+            <FirebaseRecaptchaVerifierModal
+                ref={recaptchaVerifier}
+                firebaseConfig={auth.app.options}
+            />
+
             <LinearGradient
                 colors={["rgba(0,0,0,0.6)", "rgba(0,0,0,0.8)", "rgba(0,0,0,0.9)"]}
                 style={styles.overlay}
@@ -56,11 +116,24 @@ export default function RegisterScreen() {
                 </View>
 
                 {/* Title */}
-                <Text style={styles.title}>Create Account</Text>
-                <Text style={styles.subtitle}>Enter your mobile number to get started</Text>
+                <Text style={styles.title}>Get Started</Text>
+                <Text style={styles.subtitle}>Enter your name and mobile number to get started</Text>
 
                 {/* Form */}
                 <View style={styles.formContainer}>
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.countryCode}>Name</Text>
+                        <TextInput
+                            placeholder="Enter name"
+                            placeholderTextColor="#666"
+                            style={styles.input}
+                            keyboardType="default"
+                            maxLength={10}
+                            value={name}
+                            onChangeText={setName}
+                            editable={!otpSent}
+                        />
+                    </View>
                     {/* Phone Input */}
                     <View style={styles.inputContainer}>
                         <Text style={styles.countryCode}>+91</Text>
@@ -78,12 +151,16 @@ export default function RegisterScreen() {
 
                     {/* Send OTP Button */}
                     {!showOtp && (
-                        <TouchableOpacity onPress={handleSendOtp} activeOpacity={0.8}>
+                        <TouchableOpacity onPress={handleSendOtp} activeOpacity={0.8} disabled={loading}>
                             <LinearGradient
                                 colors={phone.length >= 10 ? ["#4CAF50", "#388E3C"] : ["#555", "#444"]}
                                 style={styles.btn}
                             >
-                                <Text style={styles.btnText}>Send OTP</Text>
+                                {loading ? (
+                                    <ActivityIndicator color="#fff" />
+                                ) : (
+                                    <Text style={styles.btnText}>Send OTP</Text>
+                                )}
                             </LinearGradient>
                         </TouchableOpacity>
                     )}
@@ -109,12 +186,16 @@ export default function RegisterScreen() {
                                 />
                             </View>
 
-                            <TouchableOpacity onPress={handleVerifyOtp} activeOpacity={0.8}>
+                            <TouchableOpacity onPress={handleVerifyOtp} activeOpacity={0.8} disabled={loading}>
                                 <LinearGradient
                                     colors={otp.length >= 4 ? ["#4CAF50", "#388E3C"] : ["#555", "#444"]}
                                     style={styles.btn}
                                 >
-                                    <Text style={styles.btnText}>Verify & Continue</Text>
+                                    {loading ? (
+                                        <ActivityIndicator color="#fff" />
+                                    ) : (
+                                        <Text style={styles.btnText}>Verify & Continue</Text>
+                                    )}
                                 </LinearGradient>
                             </TouchableOpacity>
 
@@ -125,13 +206,7 @@ export default function RegisterScreen() {
                     )}
                 </View>
 
-                {/* Login Link */}
-                <View style={styles.loginContainer}>
-                    <Text style={styles.loginText}>Already have an account? </Text>
-                    <TouchableOpacity onPress={() => router.back()}>
-                        <Text style={styles.loginLink}>Log In</Text>
-                    </TouchableOpacity>
-                </View>
+
             </KeyboardAvoidingView>
         </ImageBackground>
     );

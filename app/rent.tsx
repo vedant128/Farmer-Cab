@@ -1,6 +1,3 @@
-import AddressEditModal from "@/components/AddressEditModal";
-import EquipmentMap from "@/components/EquipmentMap";
-import { useUserLocation } from "@/contexts/UserLocationContext";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { LinearGradient } from "expo-linear-gradient";
@@ -14,6 +11,9 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import AddressEditModal from "../components/AddressEditModal";
+import EquipmentMap from "../components/EquipmentMap";
+import { useUserLocation } from "../contexts/UserLocationContext";
 
 // Elegant color palette
 const colors = {

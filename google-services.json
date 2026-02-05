@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "624983656299",
+    "project_id": "farmer-cab",
+    "storage_bucket": "farmer-cab.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:624983656299:android:a087fcd92f1c23c1c22e2e",
+        "android_client_info": {
+          "package_name": "farmer.cab"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAT86Fn5Jc3GqRhSU0IFUYKIo7W5-DoO8o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

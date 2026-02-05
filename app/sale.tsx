@@ -1,5 +1,3 @@
-import AddressEditModal from "@/components/AddressEditModal";
-import { useUserLocation } from "@/contexts/UserLocationContext";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -13,6 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import AddressEditModal from "../components/AddressEditModal";
+import { useUserLocation } from "../contexts/UserLocationContext";
 
 // Elegant color palette (matching rent page)
 const colors = {
@@ -106,15 +106,7 @@ export default function BuyPage() {
         {/* Title Row */}
         <View style={styles.titleRow}>
           <Text style={styles.pageTitle}>Buy Equipment</Text>
-          <TouchableOpacity>
-            <LinearGradient
-              colors={[colors.accent, "#D97706"]}
-              style={styles.postSaleBtn}
-            >
-              <Ionicons name="add" size={16} color="#fff" />
-              <Text style={styles.postSaleText}>Sell Yours</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+
         </View>
 
         {/* Search Bar */}

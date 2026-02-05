@@ -1,4 +1,3 @@
-import { UserLocationProvider } from "@/contexts/UserLocationContext";
 import {
   DarkTheme,
   DefaultTheme,
@@ -7,6 +6,7 @@ import {
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
+import { UserLocationProvider } from "../contexts/UserLocationContext";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
