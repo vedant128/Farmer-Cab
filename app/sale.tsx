@@ -1,7 +1,8 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { useState } from "react";
+import { doc, increment, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
+import { useEffect, useState } from "react";
 import {
   Image,
   ScrollView,
@@ -13,6 +14,8 @@ import {
 } from "react-native";
 import AddressEditModal from "../components/AddressEditModal";
 import { useUserLocation } from "../contexts/UserLocationContext";
+import { auth, db } from "../firebaseConfig";
+
 
 // Elegant color palette (matching rent page)
 const colors = {
@@ -65,6 +68,41 @@ const popularItems = [
 export default function BuyPage() {
   const { address, setAddress } = useUserLocation();
   const [modalVisible, setModalVisible] = useState(false);
+  const [balance, setBalance] = useState(0);
+
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const userRef = doc(db, "users", user.uid);
+    const unsubscribe = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setBalance(data.balance || 0);
+      } else {
+        // Create document if it doesn't exist
+        setDoc(userRef, { balance: 0 }, { merge: true });
+        setBalance(0);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleAddMoney = async (amount: number) => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    try {
+      const userRef = doc(db, "users", user.uid);
+      await updateDoc(userRef, {
+        balance: increment(amount),
+      });
+      // State updates automatically via onSnapshot
+    } catch (error) {
+      console.error("Error adding money:", error);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -91,7 +129,7 @@ export default function BuyPage() {
         </View>
         <TouchableOpacity style={styles.headerRight}>
           <Ionicons name="wallet-outline" size={18} color={colors.primary} />
-          <Text style={styles.headerBalance}>₹5,200</Text>
+          <Text style={styles.headerBalance}>₹{balance.toLocaleString()}</Text>
         </TouchableOpacity>
       </View>
 
@@ -281,6 +319,13 @@ export default function BuyPage() {
         >
           <Ionicons name="leaf-outline" size={22} color={colors.textMuted} />
           <Text style={styles.navText}>Rent</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.navBtn}
+          onPress={() => router.replace("/add-rental")}
+        >
+          <Ionicons name="add" size={22} color="#fff" />
+          <Text style={styles.navText}>Post</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.navBtnActive}>

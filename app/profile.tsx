@@ -1,9 +1,10 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
+
 
 import { doc, getDoc } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -51,47 +52,59 @@ const settingsItems = [
 ];
 
 export default function ProfilePage() {
-  const [userData, setUserData] = useState({
+  const [userData, setUserData] = useState<{
+    name: string;
+    phone: string;
+    photoURL: string | null;
+    userTypes: string[];
+  }>({
     name: "",
     phone: "",
+    photoURL: null,
+    userTypes: [],
   });
+
   const [loading, setLoading] = useState(true);
 
 
   /* ---------- Fetch user from Firestore ---------- */
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const currentUser = auth.currentUser;
+  useFocusEffect(
+    useCallback(() => {
+      const fetchUser = async () => {
+        try {
+          const currentUser = auth.currentUser;
 
-        if (!currentUser) {
-          console.log("No logged-in user");
-          return;
+          if (!currentUser) {
+            console.log("No logged-in user");
+            return;
+          }
+
+          const userRef = doc(db, "users", currentUser.uid);
+          const userSnap = await getDoc(userRef);
+
+          if (userSnap.exists()) {
+            const data = userSnap.data();
+            console.log("Fetched user:", data);
+
+            setUserData({
+              name: data.name || "New User",
+              phone: data.phone || "",
+              photoURL: data.photoURL || null,
+              userTypes: data.userType || "Unknown",
+            });
+          } else {
+            console.log("User document not found");
+          }
+        } catch (error) {
+          console.log("Error fetching user:", error);
+        } finally {
+          setLoading(false);
         }
+      };
 
-        const userRef = doc(db, "users", currentUser.uid);
-        const userSnap = await getDoc(userRef);
-
-        if (userSnap.exists()) {
-          const data = userSnap.data();
-          console.log("Fetched user:", data);
-
-          setUserData({
-            name: data.name,
-            phone: data.phone,
-          });
-        } else {
-          console.log("User document not found");
-        }
-      } catch (error) {
-        console.log("Error fetching user:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUser();
-  }, []);
+      fetchUser();
+    }, [])
+  );
 
 
   /* ---------- Loading UI ---------- */
@@ -118,8 +131,7 @@ export default function ProfilePage() {
           <View style={styles.profileSection}>
             <View style={styles.avatarContainer}>
               <DefaultProfile
-                name={userData.name || "U"}
-                imageUrl={null}
+                imageUrl={userData.photoURL}
                 size={100}
               />
 
@@ -129,19 +141,28 @@ export default function ProfilePage() {
             </View>
 
             <Text style={styles.name}>{userData.name}</Text>
-            <Text style={styles.role}>Farmer • Maharashtra</Text>
+            <Text style={styles.role}>{userData.userTypes}</Text>
             <Text style={styles.email}>+91 {userData.phone}</Text>
           </View>
-
-          <View style={styles.statsRow}>
-            {stats.map((stat) => (
-              <View key={stat.id} style={styles.statItem}>
-                <Text style={styles.statValue}>{stat.value}</Text>
-                <Text style={styles.statLabel}>{stat.label}</Text>
-              </View>
-            ))}
-          </View>
+          <TouchableOpacity onPress={() => router.push("./edit-profile")}>
+            <LinearGradient
+              colors={[colors.primary, colors.primaryDark]}
+              style={styles.bookBtn}
+            >
+              <Text style={styles.bookBtnText}>Edit Profile</Text>
+            </LinearGradient>
+          </TouchableOpacity>
         </LinearGradient>
+
+        <View style={styles.statsRow}>
+          {stats.map((stat) => (
+            <View key={stat.id} style={styles.statItem}>
+              <Text style={styles.statValue}>{stat.value}</Text>
+              <Text style={styles.statLabel}>{stat.label}</Text>
+            </View>
+          ))}
+        </View>
+
 
         {/* Menu */}
         <View style={styles.menuSection}>
@@ -171,7 +192,7 @@ export default function ProfilePage() {
                 <MaterialCommunityIcons
                   name={item.icon as any}
                   size={20}
-                  color={item.color}
+                  color={item.color ?? colors.textMuted}
                 />
                 <Text style={styles.settingsLabel}>{item.label}</Text>
               </View>
@@ -195,7 +216,37 @@ export default function ProfilePage() {
         <Text style={styles.versionText}>Version 1.0.0</Text>
         <View style={{ height: 100 }} />
       </ScrollView>
+      {/* Bottom Navigation */}
+      <View style={styles.bottomNav}>
+        <TouchableOpacity
+          style={styles.navBtn}
+          onPress={() => router.replace("/rent")}
+        >
+          <Ionicons name="leaf" size={22} color={colors.textMuted} />
+
+          <Text style={styles.navText}>Rent</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.navBtn}
+          onPress={() => router.replace("/add-rental")}
+        >
+          <Ionicons name="add" size={22} color={colors.textMuted} />
+
+          <Text style={styles.navText}>Post Rental</Text>
+        </TouchableOpacity>
+
+
+
+        <TouchableOpacity style={styles.navBtnActive}>
+          <View style={styles.navActiveIndicator}>
+            <Ionicons name="person-outline" size={22} color="#fff" />
+          </View>
+          <Text style={styles.navTextActive}>Profile</Text>
+        </TouchableOpacity>
+      </View>
     </View>
+
   );
 }
 
@@ -269,6 +320,28 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     margin: 20,
   },
+  bookBtn: {
+    alignSelf: "center",        // ⬅ centers horizontally
+    minWidth: "30%",            // better than fixed width
+    borderRadius: 20,           // smoother look
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    backgroundColor: "#10B981", // emerald green
+    shadowColor: "#000",        // subtle shadow (iOS)
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,               // Android shadow
+  },
+
+  bookBtnText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 12,
+    textAlign: "center",        // center text
+    letterSpacing: 0.3,
+  },
+
   settingsItem: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -288,4 +361,44 @@ const styles = StyleSheet.create({
   },
   logoutText: { color: "#EF4444", fontWeight: "600" },
   versionText: { textAlign: "center", color: colors.textMuted, fontSize: 12 },
+  bottomNav: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    paddingVertical: 12,
+    paddingBottom: 28,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  navBtn: {
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  navBtnActive: {
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  navActiveIndicator: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    padding: 8,
+    marginBottom: 2,
+  },
+  navText: {
+    color: colors.textMuted,
+    fontWeight: "500",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  navTextActive: {
+    color: colors.primary,
+    fontWeight: "600",
+    fontSize: 12,
+    marginTop: 4,
+  },
 });

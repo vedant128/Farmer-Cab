@@ -1,10 +1,23 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Location from "expo-location";
 import { router } from "expo-router";
-import { useState } from "react";
+import {
+  collection,
+  doc,
+  increment,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+} from "firebase/firestore";
+import { useEffect, useState } from "react";
 import {
   Image,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,7 +26,9 @@ import {
 } from "react-native";
 import AddressEditModal from "../components/AddressEditModal";
 import EquipmentMap from "../components/EquipmentMap";
+import PaymentModal from "../components/PaymentModal";
 import { useUserLocation } from "../contexts/UserLocationContext";
+import { auth, db } from "../firebaseConfig";
 
 // Elegant color palette
 const colors = {
@@ -32,9 +47,154 @@ const colors = {
 
 
 export default function RentPage() {
-  const { address, setAddress } = useUserLocation();
+  const { address, setAddress, locationCoords, setLocationCoords } = useUserLocation();
   const [modalVisible, setModalVisible] = useState(false);
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [scanRange, setScanRange] = useState(10);
+  const [balance, setBalance] = useState(0);
+
+  // Fetch User Location on Mount
+  useEffect(() => {
+    (async () => {
+      try {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          console.log("Permission to access location was denied");
+          return;
+        }
+
+        let loc = await Location.getCurrentPositionAsync({});
+        setLocationCoords({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+        });
+
+        // Reverse geocode to get address if needed, but we have address from context usually
+        // For now, we trust the address context or update it if we want bidirectional sync
+      } catch (e) {
+        console.log("Error fetching location:", e);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const userRef = doc(db, "users", user.uid);
+    const unsubscribe = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setBalance(data.balance || 0);
+      } else {
+        // Create document if it doesn't exist
+        setDoc(userRef, { balance: 0 }, { merge: true });
+        setBalance(0);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleAddMoney = async (amount: number) => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    try {
+      const userRef = doc(db, "users", user.uid);
+      await updateDoc(userRef, {
+        balance: increment(amount),
+      });
+      // State updates automatically via onSnapshot
+    } catch (error) {
+      console.error("Error adding money:", error);
+    }
+  };
+
+  const [allRentals, setAllRentals] = useState<any[]>([]);
+  const [filteredRentals, setFilteredRentals] = useState<any[]>([]);
+
+  // Distance calculation (Haversine formula)
+  const getDistanceFromLatLonInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const d = R * c; // Distance in km
+    return d;
+  };
+
+  const deg2rad = (deg: number) => {
+    return deg * (Math.PI / 180);
+  };
+
+  // Fetch and Geocode Rentals
+  useEffect(() => {
+    const q = query(
+      collection(db, "rentals"),
+      orderBy("createdAt", "desc"),
+      limit(20) // Fetch more to filter
+    );
+
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      const rawData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      // Geocode rentals that don't have coords
+      const geocodedRentals = await Promise.all(
+        rawData.map(async (item: any) => {
+          if (item.latitude && item.longitude) return item;
+          if (item.location) {
+            try {
+              const geocoded = await Location.geocodeAsync(item.location);
+              if (geocoded && geocoded.length > 0) {
+                return {
+                  ...item,
+                  latitude: geocoded[0].latitude,
+                  longitude: geocoded[0].longitude,
+                };
+              }
+            } catch (e) {
+              console.log("Geocoding error for", item.location);
+            }
+          }
+          return item;
+        })
+      );
+
+      setAllRentals(geocodedRentals);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Filter Rentals based on Range
+  useEffect(() => {
+    if (!locationCoords || allRentals.length === 0) {
+      setFilteredRentals(allRentals);
+      return;
+    }
+
+    const filtered = allRentals.filter((item) => {
+      if (!item.latitude || !item.longitude) return false;
+      const distance = getDistanceFromLatLonInKm(
+        locationCoords.latitude,
+        locationCoords.longitude,
+        item.latitude,
+        item.longitude
+      );
+      return distance <= scanRange;
+    });
+
+    setFilteredRentals(filtered);
+  }, [allRentals, locationCoords, scanRange]);
+
 
   return (
     <View style={styles.container}>
@@ -59,9 +219,12 @@ export default function RentPage() {
             </TouchableOpacity>
           </View>
         </View>
-        <TouchableOpacity style={styles.headerRight}>
+        <TouchableOpacity
+          style={styles.headerRight}
+          onPress={() => setPaymentModalVisible(true)}
+        >
           <Ionicons name="wallet-outline" size={18} color={colors.primary} />
-          <Text style={styles.headerBalance}>₹5,200</Text>
+          <Text style={styles.headerBalance}>₹{balance.toLocaleString()}</Text>
         </TouchableOpacity>
       </View>
 
@@ -70,6 +233,12 @@ export default function RentPage() {
         onClose={() => setModalVisible(false)}
         currentAddress={address}
         onSave={setAddress}
+      />
+
+      <PaymentModal
+        visible={paymentModalVisible}
+        onClose={() => setPaymentModalVisible(false)}
+        onAddMoney={handleAddMoney}
       />
 
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -87,7 +256,7 @@ export default function RentPage() {
           </View>
 
           <View style={styles.mapContainer}>
-            <EquipmentMap scanRangeKm={scanRange} />
+            <EquipmentMap scanRangeKm={scanRange} rentals={filteredRentals} userLocation={locationCoords} />
           </View>
 
           <View style={styles.sliderContainer}>
@@ -112,65 +281,68 @@ export default function RentPage() {
 
         {/* Recommended for Rent */}
         <Text style={styles.sectionTitle}>Recommended for Rent</Text>
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.cardsContainer}
         >
-          <TouchableOpacity style={styles.rentCard} activeOpacity={0.8}>
-            <Image
-              source={require("../assets/images/tractor_bg.png")}
-              style={styles.tractorImg}
-            />
-            <View style={styles.cardContent}>
-              <Text style={styles.tractorTitle}>John Deere 5050D</Text>
-              <Text style={styles.tractorLoc}>Lumeqa, Maharashtra</Text>
-              <View style={styles.priceRow}>
-                <Text style={styles.tractorPrice}>₹500<Text style={styles.perHour}>/hr</Text></Text>
-                <TouchableOpacity onPress={() => router.push({ pathname: "/booking", params: { name: "John Deere 5050D", location: "Lumeqa, Maharashtra", hourlyRate: "500" } })}>
-                  <LinearGradient
-                    colors={[colors.primary, colors.primaryDark]}
-                    style={styles.bookBtn}
-                  >
-                    <Text style={styles.bookBtnText}>Book Now</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </TouchableOpacity>
+          {filteredRentals.map((item) => (
+            <TouchableOpacity key={item.id} style={styles.rentCard} activeOpacity={0.8}>
+              <Image
+                source={{ uri: item.imageUrl }}
+                style={styles.tractorImg}
+              />
 
-          <TouchableOpacity style={styles.rentCard} activeOpacity={0.8}>
-            <Image
-              source={require("../assets/images/tractor_bg.png")}
-              style={styles.tractorImg}
-            />
-            <View style={styles.cardContent}>
-              <Text style={styles.tractorTitle}>Mahindra 575</Text>
-              <Text style={styles.tractorLoc}>Malawadi, UP</Text>
-              <View style={styles.priceRow}>
-                <Text style={styles.tractorPrice}>₹600<Text style={styles.perHour}>/hr</Text></Text>
-                <TouchableOpacity onPress={() => router.push({ pathname: "/booking", params: { name: "Mahindra 575", location: "Malawadi, UP", hourlyRate: "600" } })}>
-                  <LinearGradient
-                    colors={[colors.primary, colors.primaryDark]}
-                    style={styles.bookBtn}
+              <View style={styles.cardContent}>
+                <Text style={styles.tractorTitle}>{item.name}</Text>
+                <Text style={styles.tractorLoc}>{item.location}</Text>
+
+                <View style={styles.priceRow}>
+                  <Text style={styles.tractorPrice}>
+                    ₹{item.pricePerHour}
+                    <Text style={styles.perHour}>/hr</Text>
+                  </Text>
+
+                  <TouchableOpacity
+                    onPress={() =>
+                      router.push({
+                        pathname: "/booking",
+                        params: {
+                          id: item.id,
+                          name: item.name,
+                          price: item.pricePerHour,
+                        },
+                      })
+                    }
                   >
-                    <Text style={styles.bookBtnText}>Book Now</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
+                    <LinearGradient
+                      colors={[colors.primary, colors.primaryDark]}
+                      style={styles.bookBtn}
+                    >
+                      <Text style={styles.bookBtnText}>Book</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
+
 
         {/* Wallet and Marketplace */}
         <View style={styles.walletRow}>
-          <TouchableOpacity style={styles.walletBtn} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.walletBtn}
+            activeOpacity={0.8}
+            onPress={() => setPaymentModalVisible(true)}
+          >
             <View style={styles.iconWrapper}>
               <Ionicons name="wallet-outline" size={20} color={colors.primary} />
             </View>
             <View style={styles.walletTextContainer}>
               <Text style={styles.walletLabel}>Wallet</Text>
-              <Text style={styles.walletAmount}>₹5,200</Text>
+              <Text style={styles.walletAmount}>₹{balance.toLocaleString()}</Text>
             </View>
           </TouchableOpacity>
           <TouchableOpacity style={styles.marketBtn} activeOpacity={0.8}>
@@ -182,7 +354,7 @@ export default function RentPage() {
         </View>
 
         {/* Apply for Subsidy */}
-        <TouchableOpacity style={styles.subsidyCard} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.subsidyCard} activeOpacity={0.8} onPress={() => Linking.openURL("https://mahadbt.maharashtra.gov.in/Farmer/SchemeData/SchemeData?str=E9DDFA703C38E51A147B39AD4D6A9082")}>
           <LinearGradient
             colors={[colors.primary, colors.primaryDark]}
             style={styles.subsidyIcon}
@@ -190,7 +362,7 @@ export default function RentPage() {
             <Ionicons name="leaf" size={20} color="#fff" />
           </LinearGradient>
           <View style={styles.subsidyContent}>
-            <Text style={styles.subsidyTitle}>Apply for Subsidy</Text>
+            <Text style={styles.subsidyTitle} >Apply for Subsidy</Text>
             <Text style={styles.subsidyDesc}>
               Get 50% off on equipment purchase through government schemes.
             </Text>
@@ -208,13 +380,14 @@ export default function RentPage() {
           <Text style={styles.navTextActive}>Rent</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.navBtn}
-          onPress={() => router.replace("/sale")}
+        <TouchableOpacity style={styles.navBtn}
+          onPress={() => router.replace("/add-rental")}
         >
-          <Ionicons name="pricetags-outline" size={22} color={colors.textMuted} />
-          <Text style={styles.navText}>Buy</Text>
+          <Ionicons name="add" size={22} color="#fff" />
+          <Text style={styles.navText}>Post</Text>
         </TouchableOpacity>
+
+
 
         <TouchableOpacity
           style={styles.navBtn}

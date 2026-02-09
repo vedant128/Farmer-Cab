@@ -23,7 +23,7 @@ import { auth, db } from "../firebaseConfig";
 
 
 export default function RegisterScreen() {
-    const [name, setName] = useState("");
+
     const [phone, setPhone] = useState("");
     const [otp, setOtp] = useState("");
     const [showOtp, setShowOtp] = useState(false);
@@ -34,8 +34,8 @@ export default function RegisterScreen() {
     const recaptchaVerifier = useRef<any>(null);
 
     const handleSendOtp = async () => {
-        if (name.trim() === "" || phone.length !== 10) {
-            Alert.alert("Error", "Enter valid name and phone number");
+        if (phone.length !== 10) {
+            Alert.alert("Error", "Enter valid phone number");
             return;
         }
 
@@ -71,14 +71,16 @@ export default function RegisterScreen() {
             console.log("OTP Verified. UID:", uid);
 
             console.log("Saving user to Firestore...");
-            await setDoc(doc(db, "users", uid), {
-                name,
-                phone,
-                createdAt: new Date(),
-            });
-            console.log("User saved. Navigating to /user-type...");
+            await setDoc(doc(db, "users", uid),
+                {
+                    phone,
+                    createdAt: new Date()
+                },
+                { merge: true }
+            );
+            console.log("User saved. Navigating to /rent...");
 
-            router.push("/user-type");
+            router.push("/rent");
         } catch (error: any) {
             console.error("Verification Error:", error);
             Alert.alert("Error", error.message || "Invalid OTP");
@@ -117,23 +119,10 @@ export default function RegisterScreen() {
 
                 {/* Title */}
                 <Text style={styles.title}>Get Started</Text>
-                <Text style={styles.subtitle}>Enter your name and mobile number to get started</Text>
+                <Text style={styles.subtitle}>Enter mobile number to get started</Text>
 
                 {/* Form */}
                 <View style={styles.formContainer}>
-                    <View style={styles.inputContainer}>
-                        <Text style={styles.countryCode}>Name</Text>
-                        <TextInput
-                            placeholder="Enter name"
-                            placeholderTextColor="#666"
-                            style={styles.input}
-                            keyboardType="default"
-                            maxLength={10}
-                            value={name}
-                            onChangeText={setName}
-                            editable={!otpSent}
-                        />
-                    </View>
                     {/* Phone Input */}
                     <View style={styles.inputContainer}>
                         <Text style={styles.countryCode}>+91</Text>

@@ -1,8 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { doc, getDoc, runTransaction } from "firebase/firestore";
+import { useEffect, useState } from "react";
 import {
+    Alert,
     Image,
     ScrollView,
     StyleSheet,
@@ -10,6 +12,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { auth, db } from "../firebaseConfig";
 
 // Elegant color palette
 const colors = {
@@ -37,6 +40,21 @@ export default function BookingPage() {
     const [rentalType, setRentalType] = useState<RentalType>("hourly");
     const [hours, setHours] = useState(2);
     const [days, setDays] = useState(1);
+    const [balance, setBalance] = useState(0);
+
+    useEffect(() => {
+        const fetchBalance = async () => {
+            const user = auth.currentUser;
+            if (user) {
+                const userRef = doc(db, "users", user.uid);
+                const docSnap = await getDoc(userRef);
+                if (docSnap.exists()) {
+                    setBalance(docSnap.data().balance || 0);
+                }
+            }
+        };
+        fetchBalance();
+    }, []);
 
     const quantity = rentalType === "hourly" ? hours : days;
     const rate = rentalType === "hourly" ? hourlyRate : dailyRate;
@@ -54,19 +72,50 @@ export default function BookingPage() {
         if (rentalType === "daily" && days > 1) setDays(days - 1);
     };
 
-    const handlePayment = () => {
-        // Navigate to payment success with all booking details
-        router.push({
-            pathname: "/payment-success",
-            params: {
-                amount: total.toString(),
-                equipment: equipmentName,
-                location: equipmentLocation,
-                rentalType: rentalType,
-                quantity: quantity.toString(),
-                rate: rate.toString(),
-            },
-        });
+    const handlePayment = async () => {
+        const user = auth.currentUser;
+        if (!user) {
+            Alert.alert("Error", "You must be logged in to book.");
+            return;
+        }
+
+        try {
+            const userRef = doc(db, "users", user.uid);
+
+            await runTransaction(db, async (transaction) => {
+                const userDoc = await transaction.get(userRef);
+                if (!userDoc.exists()) {
+                    throw "User data not found";
+                }
+
+                const currentBalance = userDoc.data().balance || 0;
+                if (currentBalance < total) {
+                    throw "Insufficient Balance";
+                }
+
+                transaction.update(userRef, { balance: currentBalance - total });
+            });
+
+            // Navigate to payment success with all booking details
+            router.push({
+                pathname: "/payment-success",
+                params: {
+                    amount: total.toString(),
+                    equipment: equipmentName,
+                    location: equipmentLocation,
+                    rentalType: rentalType,
+                    quantity: quantity.toString(),
+                    rate: rate.toString(),
+                },
+            });
+        } catch (e) {
+            if (e === "Insufficient Balance") {
+                Alert.alert("Insufficient Balance", "Please add money to your wallet.");
+            } else {
+                console.error(e);
+                Alert.alert("Error", "Booking failed. Please try again.");
+            }
+        }
     };
 
     return (
@@ -207,7 +256,7 @@ export default function BookingPage() {
                             </View>
                             <View>
                                 <Text style={styles.paymentLabel}>Wallet Balance</Text>
-                                <Text style={styles.paymentBalance}>₹5,200 available</Text>
+                                <Text style={styles.paymentBalance}>₹{balance.toLocaleString()} available</Text>
                             </View>
                         </View>
                         <View style={styles.radioSelected}>
