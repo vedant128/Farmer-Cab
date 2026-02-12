@@ -3,7 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect } from "expo-router";
 
 
-import { doc, getDoc } from "firebase/firestore";
+import { collection, doc, getCountFromServer, getDoc, query, where } from "firebase/firestore";
 import { useCallback, useState } from "react";
 import {
   ScrollView,

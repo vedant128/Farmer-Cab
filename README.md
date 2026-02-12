@@ -1,50 +1,94 @@
-# Welcome to your Expo app 👋
+# FarmerCab 🚜
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+FarmerCab is a peer-to-peer farming equipment rental platform designed to connect farmers who need equipment with those who have idle machinery. Built with React Native and Expo, it facilitates easy renting, booking, and management of agricultural assets.
 
-## Get started
+## 🌟 Features
 
-1. Install dependencies
+### 🚜 For Renters
+- **Browse Equipment**: View a wide range of farming machinery available for rent.
+- **Map View**: Find equipment near your location using an interactive map.
+- **Advanced Filtering**: Filter listings by distance and type.
+- **Flexible Booking**: Rent equipment by the hour or day.
+- **Wallet System**: Integrated wallet for seamless payments.
+- **Subsidy Information**: Access information about government agricultural subsidies.
 
-   ```bash
-   npm install
-   ```
+### 🌾 For Owners
+- **Post Rentals**: Easily list your tractors, harvesters, and other equipment.
+- **Manage Listings**: View and remove your active listings.
+- **Earn Money**: Track your earnings through the transaction history.
 
-2. Start the app
+### 👤 User Profile
+- **Profile Management**: Update your personal details and profile picture.
+- **Transaction History**: Keep track of all your wallet deposits and rental payments.
+- **My Listings**: Quick access to manage your posted equipment.
 
-   ```bash
-   npx expo start
-   ```
+## 🛠️ Tech Stack
 
-In the output, you'll find options to open the app in a
+- **Framework**: [React Native](https://reactnative.dev/) with [Expo](https://expo.dev/) (SDK 54)
+- **Navigation**: [Expo Router](https://docs.expo.dev/router/introduction/)
+- **Backend/Database**: [Firebase](https://firebase.google.com/) (Firestore, Auth)
+- **Maps**: `react-native-maps`, `expo-location`
+- **UI/Styling**: `expo-linear-gradient`, `@expo/vector-icons`, Custom Styles
+- **Language**: TypeScript
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## 🚀 Getting Started
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### Prerequisites
+- Node.js installed
+- Expo Go app on your physical device OR Android Emulator / iOS Simulator
+- Firebase project setup (see Configuration)
 
-## Get a fresh project
+### Installation
 
-When you're ready, run:
+1.  **Clone the repository**
+    ```bash
+    git clone https://github.com/vedant128/Farmer-Cab.git
+    cd Farmer-Cab
+    ```
 
-```bash
-npm run reset-project
+2.  **Install dependencies**
+    ```bash
+    npm install
+    ```
+
+3.  **Start the application**
+    ```bash
+    npx expo start
+    ```
+
+4.  **Run on Device/Emulator**
+    - Scan the QR code with the **Expo Go** app (Android/iOS).
+    - Press `a` for Android Emulator.
+    - Press `i` for iOS Simulator.
+
+## ⚙️ Configuration
+
+This project uses Firebase for backend services. You need to configure your `firebaseConfig.js` file with your own Firebase credentials.
+
+1.  Create a project in the [Firebase Console](https://console.firebase.google.com/).
+2.  Enable **Authentication** and **Firestore Database**.
+3.  Get your web configuration object.
+4.  Update `firebaseConfig.js` (or `.env` if configured) with your keys.
+
+## 📱 Project Structure
+
+```
+farmer-code/
+├── app/                 # Expo Router screens and pages
+│   ├── (auth)/          # Authentication routes
+│   ├── index.tsx        # Entry point
+│   ├── rent.tsx         # Main rental marketplace
+│   ├── profile.tsx      # User profile
+│   └── ...
+├── components/          # Reusable UI components
+├── assets/              # Images and fonts
+├── contexts/            # React Contexts (UserLocation, etc.)
+└── firebaseConfig.js    # Firebase configuration
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## 🤝 Contribution
 
-## Learn more
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+---
+*Built for the farming community.*
