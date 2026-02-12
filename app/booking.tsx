@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { doc, getDoc, runTransaction } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, runTransaction, serverTimestamp } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
     Alert,
@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { auth, db } from "../firebaseConfig";
 
-// Elegant color palette
+// Premium Dark Theme Palette
 const colors = {
     primary: "#10B981",
     primaryLight: "#34D399",
@@ -32,15 +32,42 @@ type RentalType = "hourly" | "daily";
 
 export default function BookingPage() {
     const params = useLocalSearchParams();
-    const equipmentName = (params.name as string) || "John Deere 5050D";
-    const equipmentLocation = (params.location as string) || "Lumeqa, Maharashtra";
-    const hourlyRate = parseInt(params.hourlyRate as string) || 500;
-    const dailyRate = hourlyRate * 8; // Daily rate is 8x hourly
+
+    // Dynamic Params
+    const equipmentId = (params.id as string) || "unknown";
+    const equipmentName = (params.name as string) || "Unknown Equipment";
+    const equipmentLocation = (params.location as string) || "Location not available";
+    const equipmentImage = (params.imageUrl as string) || "https://via.placeholder.com/300";
+    const ownerId = (params.ownerId as string) || "";
+
+    const hourlyRate = parseInt(params.price as string) || 0;
+    const dailyRate = hourlyRate * 8; // Assumed daily rate (8 working hours)
 
     const [rentalType, setRentalType] = useState<RentalType>("hourly");
     const [hours, setHours] = useState(2);
     const [days, setDays] = useState(1);
     const [balance, setBalance] = useState(0);
+    const [owner, setOwner] = useState<{ name: string; photoURL: string } | null>(null);
+
+    useEffect(() => {
+        const fetchOwner = async () => {
+            if (!ownerId) return;
+            try {
+                const userRef = doc(db, "users", ownerId);
+                const docSnap = await getDoc(userRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    setOwner({
+                        name: data.name || "Unknown User",
+                        photoURL: data.photoURL || null,
+                    });
+                }
+            } catch (error) {
+                console.log("Error fetching owner:", error);
+            }
+        };
+        fetchOwner();
+    }, [ownerId]);
 
     useEffect(() => {
         const fetchBalance = async () => {
@@ -59,7 +86,7 @@ export default function BookingPage() {
     const quantity = rentalType === "hourly" ? hours : days;
     const rate = rentalType === "hourly" ? hourlyRate : dailyRate;
     const subtotal = quantity * rate;
-    const serviceFee = Math.round(subtotal * 0.05);
+    const serviceFee = 0; // 5% fee
     const total = subtotal + serviceFee;
 
     const incrementQuantity = () => {
@@ -93,10 +120,23 @@ export default function BookingPage() {
                     throw "Insufficient Balance";
                 }
 
+                // Deduct balance
                 transaction.update(userRef, { balance: currentBalance - total });
+
+                // Note: In a real app, we would also create a 'bookings' document here
+                // transaction.set(doc(collection(db, 'bookings')), { ... })
             });
 
-            // Navigate to payment success with all booking details
+            // Record transaction
+            await addDoc(collection(db, "transactions"), {
+                userId: user.uid,
+                type: "debit",
+                amount: total,
+                description: `Rental: ${equipmentName}`,
+                date: serverTimestamp(),
+            });
+
+            // Navigate to payment success
             router.push({
                 pathname: "/payment-success",
                 params: {
@@ -106,6 +146,7 @@ export default function BookingPage() {
                     rentalType: rentalType,
                     quantity: quantity.toString(),
                     rate: rate.toString(),
+                    imageUrl: equipmentImage, // Pass image for success screen too if needed
                 },
             });
         } catch (e) {
@@ -125,162 +166,126 @@ export default function BookingPage() {
                 <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
                     <Ionicons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Book Equipment</Text>
-                <View style={{ width: 40 }} />
+                <Text style={styles.headerTitle}>Confirm Booking</Text>
+                <View style={{ width: 44 }} />
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-                {/* Equipment Card */}
-                <View style={styles.equipmentCard}>
-                    <Image
-                        source={require("../assets/images/tractor_bg.png")}
-                        style={styles.equipmentImage}
-                    />
-                    <View style={styles.equipmentInfo}>
-                        <Text style={styles.equipmentName}>{equipmentName}</Text>
-                        <View style={styles.locationRow}>
-                            <Ionicons name="location-outline" size={14} color={colors.textMuted} />
-                            <Text style={styles.equipmentLocation}>{equipmentLocation}</Text>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 150 }}>
+
+                {/* Hero Image Card */}
+                <View style={styles.heroCard}>
+                    <Image source={{ uri: equipmentImage }} style={styles.heroImage} />
+                    <LinearGradient
+                        colors={["transparent", "rgba(0,0,0,0.8)"]}
+                        style={styles.heroOverlay}
+                    >
+                        <Text style={styles.heroTitle}>{equipmentName}</Text>
+                        <View style={styles.heroLocationRow}>
+                            <Ionicons name="location" size={14} color={colors.primary} />
+                            <Text style={styles.heroLocation}>{equipmentLocation}</Text>
                         </View>
-                        <View style={styles.ratingRow}>
-                            <Ionicons name="star" size={14} color={colors.accent} />
-                            <Text style={styles.ratingText}>4.8</Text>
-                            <Text style={styles.reviewsText}>(23 reviews)</Text>
+                    </LinearGradient>
+                </View>
+
+                {/* Owner Info */}
+                {owner && (
+                    <View style={styles.ownerCard}>
+                        <Image
+                            source={owner.photoURL ? { uri: owner.photoURL } : require("../assets/images/human.png")}
+                            style={styles.ownerAvatar}
+                        />
+                        <View>
+                            <Text style={styles.ownerLabel}>Listed by</Text>
+                            <Text style={styles.ownerName}>{owner.name}</Text>
                         </View>
                     </View>
-                </View>
+                )}
 
-                {/* Rental Type Selection */}
-                <Text style={styles.sectionTitle}>Select Rental Type</Text>
-                <View style={styles.rentalTypeRow}>
+                {/* Rental Type Tabs */}
+                <Text style={styles.sectionTitle}>Rental Duration</Text>
+                <View style={styles.tabsContainer}>
                     <TouchableOpacity
-                        style={[
-                            styles.rentalTypeCard,
-                            rentalType === "hourly" && styles.rentalTypeActive,
-                        ]}
+                        style={[styles.tab, rentalType === "hourly" && styles.activeTab]}
                         onPress={() => setRentalType("hourly")}
-                        activeOpacity={0.8}
                     >
-                        <View style={styles.rentalTypeHeader}>
-                            <Ionicons
-                                name="time-outline"
-                                size={24}
-                                color={rentalType === "hourly" ? colors.primary : colors.textMuted}
-                            />
-                            {rentalType === "hourly" && (
-                                <View style={styles.checkBadge}>
-                                    <Ionicons name="checkmark" size={12} color="#fff" />
-                                </View>
-                            )}
-                        </View>
-                        <Text style={[styles.rentalTypeLabel, rentalType === "hourly" && styles.rentalTypeLabelActive]}>
-                            Hourly
-                        </Text>
-                        <Text style={styles.rentalTypePrice}>₹{hourlyRate}/hr</Text>
+                        <Text style={[styles.tabText, rentalType === "hourly" && styles.activeTabText]}>Hourly</Text>
                     </TouchableOpacity>
-
                     <TouchableOpacity
-                        style={[
-                            styles.rentalTypeCard,
-                            rentalType === "daily" && styles.rentalTypeActive,
-                        ]}
+                        style={[styles.tab, rentalType === "daily" && styles.activeTab]}
                         onPress={() => setRentalType("daily")}
-                        activeOpacity={0.8}
                     >
-                        <View style={styles.rentalTypeHeader}>
-                            <Ionicons
-                                name="calendar-outline"
-                                size={24}
-                                color={rentalType === "daily" ? colors.primary : colors.textMuted}
-                            />
-                            {rentalType === "daily" && (
-                                <View style={styles.checkBadge}>
-                                    <Ionicons name="checkmark" size={12} color="#fff" />
-                                </View>
-                            )}
-                        </View>
-                        <Text style={[styles.rentalTypeLabel, rentalType === "daily" && styles.rentalTypeLabelActive]}>
-                            Daily
-                        </Text>
-                        <Text style={styles.rentalTypePrice}>₹{dailyRate}/day</Text>
-                        <Text style={styles.savingsText}>Save 20%</Text>
+                        <Text style={[styles.tabText, rentalType === "daily" && styles.activeTabText]}>Daily (Save 20%)</Text>
                     </TouchableOpacity>
                 </View>
 
-                {/* Duration Selector */}
-                <Text style={styles.sectionTitle}>
-                    {rentalType === "hourly" ? "Select Hours" : "Select Days"}
-                </Text>
-                <View style={styles.durationCard}>
-                    <TouchableOpacity style={styles.durationBtn} onPress={decrementQuantity}>
+                {/* Quarter/Time Selector */}
+                <View style={styles.durationSelector}>
+                    <TouchableOpacity style={styles.circleBtn} onPress={decrementQuantity}>
                         <Ionicons name="remove" size={24} color={colors.text} />
                     </TouchableOpacity>
-                    <View style={styles.durationValue}>
-                        <Text style={styles.durationNumber}>{quantity}</Text>
-                        <Text style={styles.durationLabel}>
+                    <View style={styles.durationDisplay}>
+                        <Text style={styles.durationValue}>{quantity}</Text>
+                        <Text style={styles.durationUnit}>
                             {rentalType === "hourly" ? (quantity === 1 ? "Hour" : "Hours") : (quantity === 1 ? "Day" : "Days")}
                         </Text>
                     </View>
-                    <TouchableOpacity style={styles.durationBtn} onPress={incrementQuantity}>
+                    <TouchableOpacity style={styles.circleBtn} onPress={incrementQuantity}>
                         <Ionicons name="add" size={24} color={colors.text} />
                     </TouchableOpacity>
                 </View>
 
-                {/* Price Breakdown */}
-                <Text style={styles.sectionTitle}>Price Breakdown</Text>
-                <View style={styles.priceCard}>
-                    <View style={styles.priceRow}>
-                        <Text style={styles.priceLabel}>
-                            {rentalType === "hourly" ? `${quantity} hours × ₹${hourlyRate}` : `${quantity} days × ₹${dailyRate}`}
-                        </Text>
-                        <Text style={styles.priceValue}>₹{subtotal.toLocaleString()}</Text>
+                {/* Cost Breakdown */}
+                <View style={styles.receiptCard}>
+                    <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Rate</Text>
+                        <Text style={styles.receiptValue}>₹{rate}/{rentalType === "hourly" ? "hr" : "day"}</Text>
                     </View>
-                    <View style={styles.priceRow}>
-                        <Text style={styles.priceLabel}>Service Fee (5%)</Text>
-                        <Text style={styles.priceValue}>₹{serviceFee.toLocaleString()}</Text>
+                    <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Duration</Text>
+                        <Text style={styles.receiptValue}>{quantity} {rentalType === "hourly" ? "hrs" : "days"}</Text>
+                    </View>
+                    <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Service Fee</Text>
+                        <Text style={styles.receiptValue}>₹{serviceFee}</Text>
                     </View>
                     <View style={styles.divider} />
-                    <View style={styles.priceRow}>
-                        <Text style={styles.totalLabel}>Total Amount</Text>
+                    <View style={styles.receiptRow}>
+                        <Text style={styles.totalLabel}>Total</Text>
                         <Text style={styles.totalValue}>₹{total.toLocaleString()}</Text>
                     </View>
                 </View>
 
-                {/* Payment Methods */}
-                <Text style={styles.sectionTitle}>Payment Method</Text>
-                <View style={styles.paymentCard}>
-                    <TouchableOpacity style={styles.paymentOption}>
-                        <View style={styles.paymentLeft}>
-                            <View style={styles.paymentIconWrapper}>
-                                <Ionicons name="wallet" size={20} color={colors.primary} />
-                            </View>
-                            <View>
-                                <Text style={styles.paymentLabel}>Wallet Balance</Text>
-                                <Text style={styles.paymentBalance}>₹{balance.toLocaleString()} available</Text>
-                            </View>
-                        </View>
-                        <View style={styles.radioSelected}>
-                            <View style={styles.radioInner} />
-                        </View>
-                    </TouchableOpacity>
+                {/* Payment Method */}
+                <View style={styles.paymentMethod}>
+                    <View style={styles.paymentIcon}>
+                        <Ionicons name="wallet" size={24} color={colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.paymentMethodTitle}>Wallet Balance</Text>
+                        <Text style={styles.paymentMethodSubtitle}>Available: ₹{balance.toLocaleString()}</Text>
+                    </View>
+                    {balance >= total ? (
+                        <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+                    ) : (
+                        <Text style={styles.lowBalance}>Low Balance</Text>
+                    )}
                 </View>
 
-                <View style={{ height: 120 }} />
             </ScrollView>
 
-            {/* Bottom Payment Bar */}
+            {/* Bottom Floating Bar */}
             <View style={styles.bottomBar}>
-                <View style={styles.bottomPrice}>
-                    <Text style={styles.bottomTotalLabel}>Total</Text>
-                    <Text style={styles.bottomTotalValue}>₹{total.toLocaleString()}</Text>
+                <View>
+                    <Text style={styles.bottomLabel}>Total to pay</Text>
+                    <Text style={styles.bottomPrice}>₹{total.toLocaleString()}</Text>
                 </View>
-                <TouchableOpacity onPress={handlePayment} activeOpacity={0.9}>
+                <TouchableOpacity onPress={handlePayment}>
                     <LinearGradient
                         colors={[colors.primary, colors.primaryDark]}
                         style={styles.payBtn}
                     >
-                        <Ionicons name="shield-checkmark" size={18} color="#fff" />
-                        <Text style={styles.payBtnText}>Confirm & Pay</Text>
+                        <Text style={styles.payBtnText}>Confirm Booking</Text>
+                        <Ionicons name="arrow-forward" size={18} color="#fff" />
                     </LinearGradient>
                 </TouchableOpacity>
             </View>
@@ -289,301 +294,215 @@ export default function BookingPage() {
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: colors.background,
-    },
+    container: { flex: 1, backgroundColor: colors.background },
     header: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
         paddingHorizontal: 20,
-        paddingTop: 50,
-        paddingBottom: 16,
+        paddingTop: 60,
+        paddingBottom: 20,
     },
     backBtn: {
-        width: 40,
-        height: 40,
-        borderRadius: 12,
-        backgroundColor: colors.surface,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    headerTitle: {
-        color: colors.text,
-        fontSize: 18,
-        fontWeight: "600",
-    },
-    equipmentCard: {
-        flexDirection: "row",
-        backgroundColor: colors.surface,
-        borderRadius: 18,
-        marginHorizontal: 20,
-        marginBottom: 24,
-        padding: 14,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    equipmentImage: {
-        width: 90,
-        height: 90,
-        borderRadius: 14,
-    },
-    equipmentInfo: {
-        flex: 1,
-        marginLeft: 14,
-        justifyContent: "center",
-    },
-    equipmentName: {
-        color: colors.text,
-        fontSize: 18,
-        fontWeight: "700",
-        marginBottom: 6,
-    },
-    locationRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-        marginBottom: 6,
-    },
-    equipmentLocation: {
-        color: colors.textMuted,
-        fontSize: 13,
-    },
-    ratingRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-    },
-    ratingText: {
-        color: colors.accent,
-        fontWeight: "600",
-        fontSize: 13,
-    },
-    reviewsText: {
-        color: colors.textMuted,
-        fontSize: 12,
-    },
-    sectionTitle: {
-        color: colors.text,
-        fontSize: 16,
-        fontWeight: "600",
-        marginHorizontal: 20,
-        marginBottom: 12,
-    },
-    rentalTypeRow: {
-        flexDirection: "row",
-        marginHorizontal: 20,
-        gap: 12,
-        marginBottom: 24,
-    },
-    rentalTypeCard: {
-        flex: 1,
-        backgroundColor: colors.surface,
-        borderRadius: 16,
-        padding: 16,
-        alignItems: "center",
-        borderWidth: 2,
-        borderColor: "transparent",
-    },
-    rentalTypeActive: {
-        borderColor: colors.primary,
-        backgroundColor: "rgba(16, 185, 129, 0.1)",
-    },
-    rentalTypeHeader: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginBottom: 10,
-    },
-    checkBadge: {
-        backgroundColor: colors.primary,
-        borderRadius: 10,
-        width: 20,
-        height: 20,
-        justifyContent: "center",
-        alignItems: "center",
-        marginLeft: 8,
-    },
-    rentalTypeLabel: {
-        color: colors.textMuted,
-        fontSize: 15,
-        fontWeight: "500",
-        marginBottom: 4,
-    },
-    rentalTypeLabelActive: {
-        color: colors.text,
-    },
-    rentalTypePrice: {
-        color: colors.text,
-        fontSize: 17,
-        fontWeight: "700",
-    },
-    savingsText: {
-        color: colors.primary,
-        fontSize: 11,
-        fontWeight: "600",
-        marginTop: 4,
-    },
-    durationCard: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        backgroundColor: colors.surface,
-        borderRadius: 16,
-        marginHorizontal: 20,
-        marginBottom: 24,
-        padding: 12,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    durationBtn: {
-        width: 50,
-        height: 50,
-        borderRadius: 14,
-        backgroundColor: colors.surfaceLight || "#374151",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    durationValue: {
-        alignItems: "center",
-    },
-    durationNumber: {
-        color: colors.text,
-        fontSize: 36,
-        fontWeight: "700",
-    },
-    durationLabel: {
-        color: colors.textMuted,
-        fontSize: 14,
-    },
-    priceCard: {
-        backgroundColor: colors.surface,
-        borderRadius: 16,
-        marginHorizontal: 20,
-        marginBottom: 24,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    priceRow: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        marginBottom: 12,
-    },
-    priceLabel: {
-        color: colors.textMuted,
-        fontSize: 14,
-    },
-    priceValue: {
-        color: colors.text,
-        fontSize: 14,
-        fontWeight: "500",
-    },
-    divider: {
-        height: 1,
-        backgroundColor: "rgba(255,255,255,0.1)",
-        marginVertical: 12,
-    },
-    totalLabel: {
-        color: colors.text,
-        fontSize: 16,
-        fontWeight: "600",
-    },
-    totalValue: {
-        color: colors.primary,
-        fontSize: 20,
-        fontWeight: "700",
-    },
-    paymentCard: {
-        backgroundColor: colors.surface,
-        borderRadius: 16,
-        marginHorizontal: 20,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    paymentOption: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: 16,
-    },
-    paymentLeft: {
-        flexDirection: "row",
-        alignItems: "center",
-    },
-    paymentIconWrapper: {
         width: 44,
         height: 44,
-        borderRadius: 12,
-        backgroundColor: "rgba(16, 185, 129, 0.1)",
+        borderRadius: 14,
+        backgroundColor: colors.surface,
         justifyContent: "center",
         alignItems: "center",
-        marginRight: 12,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.05)",
     },
-    paymentLabel: {
+    headerTitle: {
+        fontSize: 18,
+        fontWeight: "700",
         color: colors.text,
-        fontSize: 15,
-        fontWeight: "500",
+        letterSpacing: 0.5,
     },
-    paymentBalance: {
-        color: colors.textMuted,
-        fontSize: 12,
-        marginTop: 2,
+    heroCard: {
+        height: 280,
+        marginHorizontal: 20,
+        borderRadius: 32,
+        overflow: "hidden",
+        marginBottom: 32,
+        elevation: 10,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.5,
+        shadowRadius: 20,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.05)",
     },
-    radioSelected: {
-        width: 22,
-        height: 22,
-        borderRadius: 11,
-        borderWidth: 2,
-        borderColor: colors.primary,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    radioInner: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: colors.primary,
-    },
-    bottomBar: {
+    heroImage: { width: "100%", height: "100%", resizeMode: "cover" },
+    heroOverlay: {
         position: "absolute",
         bottom: 0,
         left: 0,
         right: 0,
+        height: 140,
+        justifyContent: "flex-end",
+        padding: 24,
+    },
+    heroTitle: {
+        color: "#fff",
+        fontSize: 28,
+        fontWeight: "800",
+        marginBottom: 8,
+        letterSpacing: 0.5,
+    },
+    heroLocationRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+    heroLocation: { color: "#ddd", fontSize: 14, fontWeight: "500" },
+    ownerCard: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: colors.surface,
+        marginHorizontal: 24,
+        padding: 12,
+        borderRadius: 16,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.05)",
+        gap: 12,
+    },
+    ownerAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: colors.surfaceLight,
+    },
+    ownerLabel: {
+        color: colors.textMuted,
+        fontSize: 12,
+    },
+    ownerName: {
+        color: colors.text,
+        fontWeight: "700",
+        fontSize: 14,
+    },
+    sectionTitle: {
+        color: colors.text,
+        fontSize: 18,
+        fontWeight: "700",
+        marginHorizontal: 24,
+        marginBottom: 16,
+    },
+    tabsContainer: {
+        flexDirection: "row",
+        backgroundColor: colors.surface,
+        marginHorizontal: 24,
+        padding: 4,
+        borderRadius: 20,
+        marginBottom: 32,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.05)",
+    },
+    tab: {
+        flex: 1,
+        paddingVertical: 12,
+        alignItems: "center",
+        borderRadius: 16,
+    },
+    activeTab: {
+        backgroundColor: colors.primary,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+    },
+    tabText: {
+        color: colors.textMuted,
+        fontWeight: "600",
+        fontSize: 14,
+    },
+    activeTabText: {
+        color: "#fff",
+        fontWeight: "700",
+    },
+    durationSelector: {
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
+        marginHorizontal: 40,
+        marginBottom: 40,
+    },
+    circleBtn: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
         backgroundColor: colors.surface,
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        paddingBottom: 32,
-        borderTopWidth: 1,
-        borderTopColor: colors.border,
+        justifyContent: "center",
+        alignItems: "center",
+        borderWidth: 1,
+        borderColor: colors.border,
     },
-    bottomPrice: {
-        flex: 1,
+    durationDisplay: { alignItems: "center" },
+    durationValue: { fontSize: 42, fontWeight: "800", color: colors.text },
+    durationUnit: { fontSize: 14, color: colors.textMuted, marginTop: -4 },
+    receiptCard: {
+        backgroundColor: colors.surface,
+        marginHorizontal: 24,
+        borderRadius: 24,
+        padding: 24,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.05)",
     },
-    bottomTotalLabel: {
-        color: colors.textMuted,
-        fontSize: 12,
-        marginBottom: 2,
+    receiptRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
+    receiptLabel: { color: colors.textMuted, fontSize: 15 },
+    receiptValue: { color: colors.text, fontSize: 15, fontWeight: "600" },
+    divider: { height: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 8 },
+    totalLabel: { color: colors.text, fontSize: 18, fontWeight: "700" },
+    totalValue: { color: colors.primary, fontSize: 22, fontWeight: "800" },
+    paymentMethod: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "rgba(16, 185, 129, 0.05)",
+        marginHorizontal: 24,
+        padding: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: colors.border,
+        gap: 16,
     },
-    bottomTotalValue: {
-        color: colors.text,
-        fontSize: 22,
-        fontWeight: "700",
+    paymentIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 16,
+        backgroundColor: "rgba(16, 185, 129, 0.15)",
+        justifyContent: "center",
+        alignItems: "center",
     },
+    paymentMethodTitle: { color: colors.text, fontWeight: "700", fontSize: 15 },
+    paymentMethodSubtitle: { color: colors.textMuted, fontSize: 13 },
+    lowBalance: { color: "#EF4444", fontWeight: "700", fontSize: 13 },
+    bottomBar: {
+        position: "absolute",
+        bottom: 24,
+        left: 24,
+        right: 24,
+        backgroundColor: "rgba(31, 41, 55, 0.95)",
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: 20,
+        borderRadius: 32,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.1)",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.5,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    bottomLabel: { color: colors.textMuted, fontSize: 12, marginBottom: 2 },
+    bottomPrice: { color: colors.text, fontSize: 20, fontWeight: "800" },
     payBtn: {
         flexDirection: "row",
         alignItems: "center",
-        borderRadius: 14,
-        paddingVertical: 16,
-        paddingHorizontal: 28,
+        paddingVertical: 14,
+        paddingHorizontal: 24,
+        borderRadius: 24,
         gap: 8,
     },
-    payBtnText: {
-        color: "#fff",
-        fontSize: 16,
-        fontWeight: "700",
-    },
+    payBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
 });

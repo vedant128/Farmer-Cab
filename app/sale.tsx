@@ -66,7 +66,7 @@ const popularItems = [
 ];
 
 export default function BuyPage() {
-  const { address, setAddress } = useUserLocation();
+  const { address, setAddress, setLocationCoords } = useUserLocation();
   const [modalVisible, setModalVisible] = useState(false);
   const [balance, setBalance] = useState(0);
 
@@ -137,7 +137,12 @@ export default function BuyPage() {
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
         currentAddress={address}
-        onSave={setAddress}
+        onSave={(newAddress, coords) => {
+          setAddress(newAddress);
+          if (coords) {
+            setLocationCoords(coords);
+          }
+        }}
       />
 
       <ScrollView showsVerticalScrollIndicator={false}>

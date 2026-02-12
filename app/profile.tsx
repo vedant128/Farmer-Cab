@@ -29,26 +29,9 @@ const colors = {
   border: "rgba(16, 185, 129, 0.2)",
 };
 
-/* ---------- Dummy UI Data ---------- */
-const stats = [
-  { id: 1, label: "Listings", value: "12" },
-  { id: 2, label: "Rentals", value: "28" },
-  { id: 3, label: "Reviews", value: "4.8" },
-];
-
 const menuItems = [
   { id: 1, icon: "format-list-bulleted", label: "My Listings", value: "12 posts", color: colors.primary },
   { id: 2, icon: "swap-horizontal", label: "Transactions", value: "24 items", color: colors.primary },
-  { id: 3, icon: "heart", label: "Favorites", value: "8 items", color: "#EF4444" },
-  { id: 4, icon: "cash", label: "Subsidies", value: "3 applied", color: colors.accent },
-];
-
-const settingsItems = [
-  { id: 1, icon: "credit-card-outline", label: "Payment Methods" },
-  { id: 2, icon: "bell-outline", label: "Notifications" },
-  { id: 3, icon: "shield-check-outline", label: "Privacy & Security" },
-  { id: 4, icon: "help-circle-outline", label: "Help & Support" },
-  { id: 5, icon: "cog-outline", label: "Settings" },
 ];
 
 export default function ProfilePage() {
@@ -64,13 +47,18 @@ export default function ProfilePage() {
     userTypes: [],
   });
 
+  const [statsData, setStatsData] = useState({
+    listings: 0,
+    rentals: 0,
+  });
+
   const [loading, setLoading] = useState(true);
 
 
   /* ---------- Fetch user from Firestore ---------- */
   useFocusEffect(
     useCallback(() => {
-      const fetchUser = async () => {
+      const fetchData = async () => {
         try {
           const currentUser = auth.currentUser;
 
@@ -79,30 +67,48 @@ export default function ProfilePage() {
             return;
           }
 
+          // 1. Fetch User Profile
           const userRef = doc(db, "users", currentUser.uid);
           const userSnap = await getDoc(userRef);
 
           if (userSnap.exists()) {
             const data = userSnap.data();
-            console.log("Fetched user:", data);
-
             setUserData({
               name: data.name || "New User",
               phone: data.phone || "",
               photoURL: data.photoURL || null,
               userTypes: data.userType || "Unknown",
             });
-          } else {
-            console.log("User document not found");
           }
+
+          // 2. Fetch Listings Count
+          const listingsQ = query(
+            collection(db, "rentals"),
+            where("ownerId", "==", currentUser.uid)
+          );
+          const listingsSnap = await getCountFromServer(listingsQ);
+
+          // 3. Fetch Rentals (Bookings) Count
+          const rentalsQ = query(
+            collection(db, "transactions"),
+            where("userId", "==", currentUser.uid),
+            where("type", "==", "debit")
+          );
+          const rentalsSnap = await getCountFromServer(rentalsQ);
+
+          setStatsData({
+            listings: listingsSnap.data().count,
+            rentals: rentalsSnap.data().count,
+          });
+
         } catch (error) {
-          console.log("Error fetching user:", error);
+          console.log("Error fetching profile data:", error);
         } finally {
           setLoading(false);
         }
       };
 
-      fetchUser();
+      fetchData();
     }, [])
   );
 
@@ -155,19 +161,31 @@ export default function ProfilePage() {
         </LinearGradient>
 
         <View style={styles.statsRow}>
-          {stats.map((stat) => (
-            <View key={stat.id} style={styles.statItem}>
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
-            </View>
-          ))}
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{statsData.listings}</Text>
+            <Text style={styles.statLabel}>Listings</Text>
+          </View>
+          <View style={[styles.statItem, { borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.1)', paddingLeft: 20 }]}>
+            <Text style={styles.statValue}>{statsData.rentals}</Text>
+            <Text style={styles.statLabel}>Rentals</Text>
+          </View>
         </View>
 
 
         {/* Menu */}
         <View style={styles.menuSection}>
           {menuItems.map((item) => (
-            <TouchableOpacity key={item.id} style={styles.menuItem}>
+            <TouchableOpacity
+              key={item.id}
+              style={styles.menuItem}
+              onPress={() => {
+                if (item.label === "My Listings") {
+                  router.push("/my-listings");
+                } else if (item.label === "Transactions") {
+                  router.push("/transactions");
+                }
+              }}
+            >
               <View style={styles.menuLeft}>
                 <View style={[styles.menuIconWrapper, { backgroundColor: `${item.color}15` }]}>
                   <MaterialCommunityIcons
@@ -183,23 +201,6 @@ export default function ProfilePage() {
           ))}
         </View>
 
-        {/* Settings */}
-        <Text style={styles.sectionTitle}>Settings</Text>
-        <View style={styles.settingsSection}>
-          {settingsItems.map((item) => (
-            <TouchableOpacity key={item.id} style={styles.settingsItem}>
-              <View style={styles.settingsLeft}>
-                <MaterialCommunityIcons
-                  name={item.icon as any}
-                  size={20}
-                  color={item.color ?? colors.textMuted}
-                />
-                <Text style={styles.settingsLabel}>{item.label}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-            </TouchableOpacity>
-          ))}
-        </View>
 
         {/* Logout */}
         <TouchableOpacity
@@ -254,151 +255,176 @@ export default function ProfilePage() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   headerGradient: {
-    paddingTop: 50,
-    paddingBottom: 24,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    paddingTop: 70,
+    paddingBottom: 40,
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
   },
   profileSection: { alignItems: "center", marginBottom: 24 },
-  avatarContainer: { position: "relative", marginBottom: 14 },
+  avatarContainer: { position: "relative", marginBottom: 16 },
   verifiedBadge: {
     position: "absolute",
-    bottom: 4,
-    right: 4,
+    bottom: 0,
+    right: 0,
     backgroundColor: colors.primary,
-    borderRadius: 12,
-    width: 24,
-    height: 24,
+    borderRadius: 14,
+    width: 28,
+    height: 28,
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 2,
+    borderColor: colors.surface,
   },
-  name: { fontSize: 24, fontWeight: "700", color: colors.text },
-  role: { fontSize: 14, color: colors.primary },
+  name: { fontSize: 28, fontWeight: "800", color: colors.text, marginBottom: 4, letterSpacing: 0.5 },
+  role: { fontSize: 15, color: colors.primaryLight, fontWeight: "600", marginBottom: 4 },
   email: { color: colors.textMuted, fontSize: 14 },
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-around",
-    marginHorizontal: 20,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 16,
-    paddingVertical: 16,
+    marginHorizontal: 24,
+    backgroundColor: "rgba(31, 41, 55, 0.6)",
+    borderRadius: 24,
+    paddingVertical: 20,
+    marginTop: -30, // Overlap header
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
   },
   statItem: { alignItems: "center" },
-  statValue: { fontSize: 22, fontWeight: "700", color: colors.text },
-  statLabel: { fontSize: 12, color: colors.textMuted },
+  statValue: { fontSize: 24, fontWeight: "800", color: colors.text },
+  statLabel: { fontSize: 12, color: colors.textMuted, fontWeight: "500", marginTop: 2 },
   menuSection: {
     backgroundColor: colors.surface,
-    borderRadius: 18,
-    margin: 20,
+    borderRadius: 24,
+    margin: 24,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "rgba(255,255,255,0.05)",
+    overflow: "hidden",
   },
   menuItem: {
     flexDirection: "row",
     justifyContent: "space-between",
-    padding: 16,
+    padding: 18,
     alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.05)",
   },
   menuLeft: { flexDirection: "row", alignItems: "center" },
   menuIconWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 16,
   },
-  menuLabel: { color: colors.text },
+  menuLabel: { color: colors.text, fontSize: 15, fontWeight: "600" },
   sectionTitle: {
     color: colors.text,
     fontSize: 18,
     fontWeight: "700",
-    marginHorizontal: 20,
+    marginHorizontal: 24,
+    marginBottom: 12,
+    marginTop: 8,
   },
   settingsSection: {
     backgroundColor: colors.surface,
-    borderRadius: 18,
-    margin: 20,
+    borderRadius: 24,
+    margin: 24,
+    marginTop: 0,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
   },
   bookBtn: {
-    alignSelf: "center",        // ⬅ centers horizontally
-    minWidth: "30%",            // better than fixed width
-    borderRadius: 20,           // smoother look
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    backgroundColor: "#10B981", // emerald green
-    shadowColor: "#000",        // subtle shadow (iOS)
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,               // Android shadow
+    alignSelf: "center",
+    minWidth: "35%",
+    borderRadius: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: "#10B981",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-
   bookBtnText: {
     color: "#fff",
-    fontWeight: "600",
-    fontSize: 12,
-    textAlign: "center",        // center text
-    letterSpacing: 0.3,
+    fontWeight: "700",
+    fontSize: 13,
+    textAlign: "center",
+    letterSpacing: 0.5,
   },
-
   settingsItem: {
     flexDirection: "row",
     justifyContent: "space-between",
-    padding: 16,
+    padding: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.05)",
   },
-  settingsLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
-  settingsLabel: { color: colors.text },
+  settingsLeft: { flexDirection: "row", alignItems: "center", gap: 14 },
+  settingsLabel: { color: colors.text, fontSize: 15, fontWeight: "500" },
   logoutBtn: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 14,
+    marginHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 20,
     backgroundColor: "rgba(239,68,68,0.1)",
-    gap: 8,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.2)",
   },
-  logoutText: { color: "#EF4444", fontWeight: "600" },
-  versionText: { textAlign: "center", color: colors.textMuted, fontSize: 12 },
+  logoutText: { color: "#EF4444", fontWeight: "700", fontSize: 15 },
+  versionText: { textAlign: "center", color: colors.textMuted, fontSize: 12, marginTop: 16 },
   bottomNav: {
     position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: 24,
+    left: 24,
+    right: 24,
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: colors.surface,
-    paddingVertical: 12,
-    paddingBottom: 28,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    backgroundColor: "rgba(31, 41, 55, 0.95)",
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
   },
   navBtn: {
     alignItems: "center",
-    paddingHorizontal: 20,
+    justifyContent: "center",
+    opacity: 0.6,
   },
   navBtnActive: {
     alignItems: "center",
-    paddingHorizontal: 20,
+    justifyContent: "center",
   },
   navActiveIndicator: {
     backgroundColor: colors.primary,
-    borderRadius: 12,
-    padding: 8,
-    marginBottom: 2,
+    borderRadius: 14,
+    padding: 10,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  navText: {
-    color: colors.textMuted,
-    fontWeight: "500",
-    fontSize: 12,
-    marginTop: 4,
-  },
-  navTextActive: {
-    color: colors.primary,
-    fontWeight: "600",
-    fontSize: 12,
-    marginTop: 4,
-  },
+  navText: { display: 'none' },
+  navTextActive: { display: 'none' },
 });

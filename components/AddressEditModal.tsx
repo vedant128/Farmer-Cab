@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Location from "expo-location";
 import React, { useEffect, useState } from "react";
 import {
+    ActivityIndicator,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -16,7 +18,7 @@ interface AddressEditModalProps {
     visible: boolean;
     onClose: () => void;
     currentAddress: string;
-    onSave: (newAddress: string) => void;
+    onSave: (newAddress: string, coords?: { latitude: number; longitude: number }) => void;
 }
 
 export default function AddressEditModal({
@@ -26,15 +28,63 @@ export default function AddressEditModal({
     onSave,
 }: AddressEditModalProps) {
     const [address, setAddress] = useState(currentAddress);
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         setAddress(currentAddress);
     }, [currentAddress]);
 
-    const handleSave = () => {
-        if (address.trim()) {
+    const handleUseCurrentLocation = async () => {
+        setLoading(true);
+        try {
+            let { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== "granted") {
+                alert("Permission to access location was denied");
+                setLoading(false);
+                return;
+            }
+
+            let location = await Location.getCurrentPositionAsync({});
+            const { latitude, longitude } = location.coords;
+
+            // Reverse geocode
+            let reverseGeocode = await Location.reverseGeocodeAsync({ latitude, longitude });
+            if (reverseGeocode.length > 0) {
+                const place = reverseGeocode[0];
+                const formattedAddress = `${place.city || place.subregion}, ${place.region}`;
+                setAddress(formattedAddress);
+                onSave(formattedAddress, { latitude, longitude });
+                onClose();
+            }
+        } catch (error) {
+            console.error("Error getting location:", error);
+            alert("Could not fetch location");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSave = async () => {
+        if (!address.trim()) return;
+
+        setLoading(true);
+        try {
+            // Forward geocode to get coordinates for the typed address
+            const geocoded = await Location.geocodeAsync(address);
+            if (geocoded.length > 0) {
+                const { latitude, longitude } = geocoded[0];
+                onSave(address, { latitude, longitude });
+            } else {
+                // If geocoding fails, just save the address string (fallback)
+                onSave(address);
+            }
+            onClose();
+        } catch (error) {
+            console.error("Error geocoding address:", error);
             onSave(address);
             onClose();
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -75,17 +125,36 @@ export default function AddressEditModal({
                         />
                     </View>
 
+                    <TouchableOpacity
+                        style={styles.currentLocationBtn}
+                        onPress={handleUseCurrentLocation}
+                        disabled={loading}
+                    >
+                        {loading ? (
+                            <ActivityIndicator size="small" color="#10B981" />
+                        ) : (
+                            <>
+                                <Ionicons name="locate" size={18} color="#10B981" />
+                                <Text style={styles.currentLocationText}>Use Current Location</Text>
+                            </>
+                        )}
+                    </TouchableOpacity>
+
                     <View style={styles.buttonContainer}>
                         <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
                             <Text style={styles.cancelBtnText}>Cancel</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity onPress={handleSave} style={{ flex: 1 }}>
+                        <TouchableOpacity onPress={handleSave} style={{ flex: 1 }} disabled={loading}>
                             <LinearGradient
                                 colors={["#10B981", "#059669"]}
                                 style={styles.saveBtn}
                             >
-                                <Text style={styles.saveBtnText}>Save Location</Text>
+                                {loading ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.saveBtnText}>Save Location</Text>
+                                )}
                             </LinearGradient>
                         </TouchableOpacity>
                     </View>
@@ -139,7 +208,7 @@ const styles = StyleSheet.create({
         alignItems: "center",
         backgroundColor: "#374151",
         borderRadius: 12,
-        marginBottom: 24,
+        marginBottom: 16,
         borderWidth: 1,
         borderColor: "rgba(16, 185, 129, 0.4)",
     },
@@ -153,6 +222,24 @@ const styles = StyleSheet.create({
         paddingRight: 12,
         color: "#F9FAFB",
         fontSize: 16,
+    },
+    currentLocationBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        alignSelf: "flex-start",
+        marginBottom: 24,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        backgroundColor: "rgba(16, 185, 129, 0.1)",
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: "rgba(16, 185, 129, 0.3)",
+    },
+    currentLocationText: {
+        color: "#10B981",
+        fontSize: 14,
+        fontWeight: "600",
+        marginLeft: 6,
     },
     buttonContainer: {
         flexDirection: "row",
